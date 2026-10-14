@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penrose Tiling Aperiodic Pattern Generator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #030712; }
+  canvas { display: block; cursor: crosshair; }
+  .glow { text-shadow: 0 0 10px #a78bfa, 0 0 20px #7c3aed; }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #1f2937;
+    height: 6px;
+    border-radius: 3px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #7c3aed;
+    cursor: pointer;
+    box-shadow: 0 0 8px #7c3aed;
+  }
+  .btn {
+    background: linear-gradient(135deg, #4c1d95, #7c3aed);
+    border: 1px solid #7c3aed;
+    transition: all 0.2s;
+  }
+  .btn:hover { box-shadow: 0 0 12px #7c3aed; transform: translateY(-1px); }
+  .preset-btn {
+    background: #1f2937;
+    border: 1px solid #374151;
+    transition: all 0.2s;
+  }
+  .preset-btn:hover, .preset-btn.active {
+    border-color: #7c3aed;
+    background: #2d1f52;
+    box-shadow: 0 0 8px #7c3aed44;
+  }
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+
+<div class="flex flex-col h-screen">
+  <!-- Header -->
+  <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold glow">Penrose Tiling Aperiodic Pattern Generator</h1>
+      <p class="text-gray-400 text-sm mt-1">P2 Rhombus Tiling via Deflation — Quasicrystal Structure with 10-fold Rotational Symmetry</p>
+    </div>
+    <div class="flex gap-2">
+      <button id="btnExportSVG" class="btn px-4 py-2 rounded text-sm font-semibold text-white">Export SVG</button>
+      <button id="btnRegen" class="btn px-4 py-2 rounded text-sm font-semibold text-white">Regenerate</button>
+    </div>
+  </div>
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Canvas -->
+    <div class="flex-1 flex items-center justify-center bg-gray-950 relative overflow-hidden">
+      <canvas id="canvas"></canvas>
+      <div id="annotation" class="absolute bottom-4 left-4 bg-gray-900 bg-opacity-90 border border-gray-700 rounded-lg p-3 max-w-xs text-xs text-gray-300">
+        <div class="text-purple-400 font-bold mb-1">10-fold Rotational Symmetry</div>
+        <div>Penrose tiling has <span class="text-yellow-300">no translational periodicity</span> yet exhibits
+        <span class="text-purple-300">10-fold (decagonal) rotational symmetry</span>.
+        Deflation replaces each rhombus with smaller tiles following golden ratio φ = (1+√5)/2 ≈ 1.618 rules.
+        <span class="text-blue-300">Fat:Thin ratio → φ</span> as depth increases.</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="w-72 bg-gray-900 border-l border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto">
+      <!-- Depth -->
+      <div>
+        <label class="text-sm font-semibold text-gray-300 mb-2 block">Deflation Depth: <span id="depthVal" class="text-purple-400">3</span></label>
+        <input type="range" id="depth" min="1" max="4" value="3" class="w-full">
+        <div class="flex justify-between text-xs text-gray-500 mt-1">
+          <span>1 (sparse)</span><span>4 (dense)</span>
+        </div>
+      </div>
+
+      <!-- Color Mode -->
+      <div>
+        <label class="text-sm font-semibold text-gray-300 mb-2 block">Color Mode</label>
+        <div class="flex flex-col gap-2">
+          <button class="preset-btn active px-3 py-2 rounded text-sm text-gray-200" data-color="type" id="colorType">Type (Fat/Thin)</button>
+          <button class="preset-btn px-3 py-2 rounded text-sm text-gray-200" data-color="rainbow" id="colorRainbow">Rainbow Gradient</button>
+          <button class="preset-btn px-3 py-2 rounded text-sm text-gray-200" data-color="gold" id="colorGold">Golden Ratio Hue</button>
+          <button class="preset-btn px-3 py-2 rounded text-sm text-gray-200" data-color="mono" id="colorMono">Monochrome</button>
+        </div>
+      </div>
+
+      <!-- Fat rhombus color -->
+      <div id="typeColorSection">
+        <div class="text-sm font-semibold text-gray-300 mb-2">Type Colors</div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-xs text-gray-400 w-16">Fat (36°):</span>
+          <input type="color" id="fatColor" value="#7c3aed" class="h-7 w-16 rounded cursor-pointer bg-gray-800 border-0">
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-400 w-16">Thin (72°):</span>
+          <input type="color" id="thinColor" value="#0ea5e9" class="h-7 w-16 rounded cursor-pointer bg-gray-800 border-0">
+        </div>
+      </div>
+
+      <!-- Initial tiles -->
+      <div>
+        <label class="text-sm font-semibold text-gray-300 mb-2 block">Initial Arrangement</label>
+        <div class="flex flex-col gap-2">
+          <button class="preset-btn active px-3 py-2 rounded text-sm text-gray-200" data-init="sun" id="initSun">Sun (5 fat rhombi)</button>
+          <button class="preset-btn px-3 py-2 rounded text-sm text-gray-200" data-init="star" id="initStar">Star (5 thin rhombi)</button>
+          <button class="preset-btn px-3 py-2 rounded text-sm text-gray-200" data-init="decagon" id="initDecagon">Decagon Ring</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="bg-gray-800 rounded p-3 text-xs">
+        <div class="text-gray-400 font-semibold mb-2">Tiling Statistics</div>
+        <div class="flex justify-between"><span class="text-gray-400">Fat rhombi:</span><span id="statFat" class="text-yellow-300">—</span></div>
+        <div class="flex justify-between mt-1"><span class="text-gray-400">Thin rhombi:</span><span id="statThin" class="text-blue-300">—</span></div>
+        <div class="flex justify-between mt-1"><span class="text-gray-400">Total tiles:</span><span id="statTotal" class="text-purple-300">—</span></div>
+        <div class="flex justify-between mt-1"><span class="text-gray-400">Fat/Thin ratio:</span><span id="statRatio" class="text-green-300">—</span></div>
+        <div class="flex justify-between mt-1"><span class="text-gray-400">φ = (1+√5)/2:</span><span class="text-orange-300">1.6180…</span></div>
+      </div>
+
+      <!-- Annotation toggle -->
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="showAnnotation" checked class="accent-purple-500">
+        <label for="showAnnotation" class="text-sm text-gray-300">Show annotation</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PHI = (1 + Math.sqrt(5)) / 2;
+const DEG = Math.PI / 180;
+
+// ---- Penrose P2 Deflation (Robinson triangles method) ----
+// Each rhombus is split into 2 triangles (half-tiles)
+// Fat rhombus: 2 acute (36-72-72) triangles
+// Thin rhombus: 2 obtuse (36-36-108) triangles
+// Deflation rules produce smaller tiles recursively
+
+// Triangle types:
+// Type 0 (acute, part of fat): apex angle 36°
+// Type 1 (obtuse, part of thin): apex angle 108°
+
+function deflate(triangles) {
+  const next = [];
+  for (const t of triangles) {
+    const [type, A, B, C] = t;
+    if (type === 0) {
+      // Acute triangle: split into 1 acute + 1 obtuse
+      const P = [A[0] + (B[0] - A[0]) / PHI, A[1] + (B[1] - A[1]) / PHI];
+      next.push([0, C, P, B]);
+      next.push([1, P, C, A]);
+    } else {
+      // Obtuse triangle: split into 2 acute + 1 obtuse
+      const Q = [B[0] + (A[0] - B[0]) / PHI, B[1] + (A[1] - B[1]) / PHI];
+      const R = [B[0] + (C[0] - B[0]) / PHI, B[1] + (C[1] - B[1]) / PHI];
+      next.push([1, R, C, A]);
+      next.push([1, Q, R, B]);
+      next.push([0, R, Q, A]);
+    }
+  }
+  return next;
+}
+
+function initSun(cx, cy, size) {
+  const tris = [];
+  for (let i = 0; i < 10; i++) {
+    const a1 = (36 * i - 18) * DEG;
+    const a2 = (36 * (i + 1) - 18) * DEG;
+    const B = [cx + size * Math.cos(a1), cy + size * Math.sin(a1)];
+    const C = [cx + size * Math.cos(a2), cy + size * Math.sin(a2)];
+    tris.push([0, [cx, cy], B, C]);
+  }
+  return tris;
+}
+
+function initStar(cx, cy, size) {
+  const tris = [];
+  for (let i = 0; i < 10; i++) {
+    const a1 = (36 * i) * DEG;
+    const a2 = (36 * (i + 1)) * DEG;
+    const B = [cx + size * Math.cos(a1), cy + size * Math.sin(a1)];
+    const C = [cx + size * Math.cos(a2), cy + size * Math.sin(a2)];
+    tris.push([1, [cx, cy], B, C]);
+  }
+  return tris;
+}
+
+function initDecagon(cx, cy, size) {
+  const tris = [];
+  const r1 = size;
+  const r2 = size * PHI;
+  for (let i = 0; i < 10; i++) {
+    const a1 = (36 * i) * DEG;
+    const a2 = (36 * (i + 1)) * DEG;
+    const am = (36 * i + 18) * DEG;
+    const inner = [cx + r1 * Math.cos(am), cy + r1 * Math.sin(am)];
+    const B = [cx + r2 * Math.cos(a1), cy + r2 * Math.sin(a1)];
+    const C = [cx + r2 * Math.cos(a2), cy + r2 * Math.sin(a2)];
+    tris.push([0, inner, B, C]);
+  }
+  return tris;
+}
+
+// Merge triangles back to rhombi for rendering (pair matching by edge)
+// For visual clarity, just draw triangles directly
+function drawTiling(ctx, triangles, colorMode, fatColor, thinColor, w, h) {
+  let fatCount = 0, thinCount = 0;
+  ctx.clearRect(0, 0, w, h);
+
+  // background
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(0, 0, w, h);
+
+  const n = triangles.length;
+  for (let i = 0; i < n; i++) {
+    const [type, A, B, C] = triangles[i];
+
+    let fill;
+    if (colorMode === 'type') {
+      fill = type === 0 ? fatColor : thinColor;
+    } else if (colorMode === 'rainbow') {
+      const hue = (i / n) * 360;
+      fill = `hsl(${hue},70%,55%)`;
+    } else if (colorMode === 'gold') {
+      const hue = (i * 137.508) % 360; // golden angle
+      const light = type === 0 ? 55 : 45;
+      fill = `hsl(${hue},65%,${light}%)`;
+    } else {
+      const bright = type === 0 ? 60 : 35;
+      fill = `hsl(260,10%,${bright}%)`;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(A[0], A[1]);
+    ctx.lineTo(B[0], B[1]);
+    ctx.lineTo(C[0], C[1]);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = '#030712';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    if (type === 0) fatCount++;
+    else thinCount++;
+  }
+  return { fat: Math.round(fatCount / 2), thin: Math.round(thinCount / 2), total: Math.round(n / 2) };
+}
+
+// ---- Main ----
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let state = {
+  depth: 3,
+  colorMode: 'type',
+  initMode: 'sun',
+  fatColor: '#7c3aed',
+  thinColor: '#0ea5e9',
+  triangles: [],
+  offset: { x: 0, y: 0 },
+  scale: 1,
+  dragging: false,
+  lastMouse: null,
+};
+
+function resize() {
+  const container = canvas.parentElement;
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  generate();
+}
+
+function generate() {
+  const w = canvas.width, h = canvas.height;
+  const size = Math.min(w, h) * 0.42;
+  const cx = w / 2 + state.offset.x;
+  const cy = h / 2 + state.offset.y;
+
+  let tris;
+  if (state.initMode === 'sun') tris = initSun(cx, cy, size);
+  else if (state.initMode === 'star') tris = initStar(cx, cy, size);
+  else tris = initDecagon(cx, cy, size);
+
+  for (let d = 0; d < state.depth; d++) {
+    tris = deflate(tris);
+  }
+  state.triangles = tris;
+  render();
+}
+
+function render() {
+  const w = canvas.width, h = canvas.height;
+  const stats = drawTiling(ctx, state.triangles, state.colorMode, state.fatColor, state.thinColor, w, h);
+  document.getElementById('statFat').textContent = stats.fat.toLocaleString();
+  document.getElementById('statThin').textContent = stats.thin.toLocaleString();
+  document.getElementById('statTotal').textContent = stats.total.toLocaleString();
+  const ratio = stats.thin > 0 ? (stats.fat / stats.thin).toFixed(4) : '—';
+  document.getElementById('statRatio').textContent = ratio;
+}
+
+// Controls
+document.getElementById('depth').addEventListener('input', e => {
+  state.depth = +e.target.value;
+  document.getElementById('depthVal').textContent = state.depth;
+  generate();
+});
+
+document.querySelectorAll('[data-color]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.colorMode = btn.dataset.color;
+    document.querySelectorAll('[data-color]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('typeColorSection').style.display = state.colorMode === 'type' ? 'block' : 'none';
+    render();
+  });
+});
+
+document.querySelectorAll('[data-init]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.initMode = btn.dataset.init;
+    document.querySelectorAll('[data-init]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    generate();
+  });
+});
+
+document.getElementById('fatColor').addEventListener('input', e => {
+  state.fatColor = e.target.value;
+  render();
+});
+document.getElementById('thinColor').addEventListener('input', e => {
+  state.thinColor = e.target.value;
+  render();
+});
+
+document.getElementById('btnRegen').addEventListener('click', () => {
+  state.offset = { x: 0, y: 0 };
+  generate();
+});
+
+document.getElementById('showAnnotation').addEventListener('change', e => {
+  document.getElementById('annotation').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// SVG Export
+document.getElementById('btnExportSVG').addEventListener('click', () => {
+  const w = canvas.width, h = canvas.height;
+  let paths = '';
+  const n = state.triangles.length;
+  for (let i = 0; i < n; i++) {
+    const [type, A, B, C] = state.triangles[i];
+    let fill;
+    if (state.colorMode === 'type') {
+      fill = type === 0 ? state.fatColor : state.thinColor;
+    } else if (state.colorMode === 'rainbow') {
+      const hue = (i / n) * 360;
+      fill = `hsl(${hue},70%,55%)`;
+    } else if (state.colorMode === 'gold') {
+      const hue = (i * 137.508) % 360;
+      fill = `hsl(${hue},65%,${type === 0 ? 55 : 45}%)`;
+    } else {
+      fill = type === 0 ? '#666' : '#333';
+    }
+    paths += `<polygon points="${A[0]},${A[1]} ${B[0]},${B[1]} ${C[0]},${C[1]}" fill="${fill}" stroke="#030712" stroke-width="0.5"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<rect width="${w}" height="${h}" fill="#030712"/>
+${paths}
+<text x="10" y="${h-10}" fill="#888" font-size="12" font-family="monospace">Penrose P2 Tiling — Depth ${state.depth} — φ = ${PHI.toFixed(6)}</text>
+</svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `penrose-p2-depth${state.depth}.svg`;
+  a.click(); URL.revokeObjectURL(url);
+});
+
+// Pan
+canvas.addEventListener('mousedown', e => {
+  state.dragging = true;
+  state.lastMouse = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('mousemove', e => {
+  if (!state.dragging) return;
+  const dx = e.clientX - state.lastMouse.x;
+  const dy = e.clientY - state.lastMouse.y;
+  state.offset.x += dx;
+  state.offset.y += dy;
+  state.lastMouse = { x: e.clientX, y: e.clientY };
+  generate();
+});
+canvas.addEventListener('mouseup', () => { state.dragging = false; });
+canvas.addEventListener('mouseleave', () => { state.dragging = false; });
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
